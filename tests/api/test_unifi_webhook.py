@@ -215,6 +215,60 @@ async def test_unifi_webhook_unknown_site(session, app_and_deps, client):
 
 
 @pytest.mark.asyncio
+async def test_unifi_webhook_integrity_error_returns_duplicate(
+    session, app_and_deps, client, monkeypatch
+):
+    app, redis, arq, Factory = app_and_deps
+    tenant_id, _ = await _seed_tenant_and_site(session, site_id="site-abc")
+
+    body = (FIX / "link_down.json").read_bytes()
+    payload = json.loads(body)
+    sig = _sign(body)
+
+    resp1 = await client.post(
+        "/webhooks/unifi",
+        content=body,
+        headers={
+            "X-Athena-Tenant-Id": tenant_id,
+            "X-Signature": sig,
+            "Content-Type": "application/json",
+        },
+    )
+    assert resp1.status_code == 202, resp1.text
+
+    # Simulate concurrent race: bypass Redis dedupe so the request hits the DB
+    # and trips the unique constraint.
+    async def _always_unseen(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(
+        "athena.api.routes.webhooks.already_seen", _always_unseen
+    )
+
+    resp2 = await client.post(
+        "/webhooks/unifi",
+        content=body,
+        headers={
+            "X-Athena-Tenant-Id": tenant_id,
+            "X-Signature": sig,
+            "Content-Type": "application/json",
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+    data = resp2.json()
+    assert data["status"] == "duplicate"
+    assert data["vendor_event_id"] == payload["event_id"]
+
+    async with Factory() as s:
+        rows = (
+            await s.execute(
+                select(Event).where(Event.vendor_event_id == payload["event_id"])
+            )
+        ).scalars().all()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
 async def test_unifi_webhook_cross_tenant_isolation(session, app_and_deps, client):
     app, redis, arq, Factory = app_and_deps
 

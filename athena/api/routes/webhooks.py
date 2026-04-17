@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from redis.asyncio import Redis
 from arq.connections import ArqRedis
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from athena.api.deps import get_arq_pool, get_db_session, get_redis
@@ -72,9 +73,16 @@ async def unifi_webhook(
         occurred_at=normalized.occurred_at,
     )
     db.add(event)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        response.status_code = status.HTTP_200_OK
+        return {"status": "duplicate", "vendor_event_id": vendor_event_id}
     await db.refresh(event)
 
+    # At-least-once: DB row is source of truth; failures here trigger producer retry,
+    # and the unique constraint above makes retries idempotent.
     await mark_seen(
         redis,
         tenant_id=x_athena_tenant_id,
