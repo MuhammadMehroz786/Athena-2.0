@@ -8,4 +8,4 @@ Monitoring + remediation brain for UniFi/Meraki/Domotz.
 3. `pip install -e .[dev]`
 4. `alembic upgrade head`
 5. `pytest`
-6. `uvicorn athena.api.main:app --reload`
+6. `uvicorn athena.api.main:app --reload` (available after Plan 1 Task 12)
