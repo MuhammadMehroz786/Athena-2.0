@@ -46,7 +46,7 @@ def normalize_unifi_payload(payload: dict[str, Any]) -> NormalizedEvent:
         vendor="unifi",
         vendor_event_id=str(payload["event_id"]),
         vendor_site_id=str(payload["site_id"]),
-        vendor_device_id=payload.get("device_mac"),
+        vendor_device_id=(str(payload["device_mac"]) if payload.get("device_mac") is not None else None),
         event_type=str(payload["type"]),
         severity=severity,
         occurred_at=occurred,
