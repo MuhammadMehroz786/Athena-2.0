@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, UTC
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -18,7 +19,7 @@ def patch_sessionmaker(session, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_detect_event_returns_stub_payload(session, patch_sessionmaker):
+async def test_detect_event_returns_stub_payload(session, patch_sessionmaker, caplog):
     t = Tenant(name="Acme"); session.add(t); await session.flush()
     s = Site(tenant_id=t.id, name="HQ"); session.add(s); await session.flush()
     e = Event(
@@ -30,8 +31,15 @@ async def test_detect_event_returns_stub_payload(session, patch_sessionmaker):
     session.add(e)
     await session.commit()
 
-    result = await jobs.detect_event({}, event_id=e.id)
+    with caplog.at_level(logging.INFO, logger="athena.worker.jobs"):
+        result = await jobs.detect_event({}, event_id=e.id)
     assert result == {"event_id": e.id, "status": "detected_stub"}
+    info_records = [
+        r for r in caplog.records
+        if r.name == "athena.worker.jobs" and r.levelno == logging.INFO
+    ]
+    assert info_records, "expected at least one INFO log from detect_event"
+    assert any(e.id in r.getMessage() for r in info_records)
 
 
 @pytest.mark.asyncio
