@@ -12,7 +12,7 @@ dependencies = [
   "alembic==1.14.*",
   "arq==0.26.*",
   "redis==5.2.*",
-  "httpx==0.27.*",
+  "httpx>=0.27,<0.29",
   "python-dotenv==1.0.*",
 ]
 

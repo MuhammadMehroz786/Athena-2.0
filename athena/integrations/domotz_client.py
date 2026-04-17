@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -98,20 +99,34 @@ class DomotzClient:
             raise _build_error(method, path, resp.status_code, resp.text, url)
 
         logger.info("domotz %s %s (%d)", method, path, resp.status_code)
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            logger.warning("domotz %s %s non-json-response", method, path)
+            raise DomotzAPIError(
+                f"{method} {path} -> non-JSON response",
+                status_code=resp.status_code,
+                url=url,
+            ) from exc
 
     async def list_agents(self) -> list[dict]:
         data = await self._request("GET", "/agent")
         return data
 
     async def get_agent(self, agent_id: str) -> dict:
-        data = await self._request("GET", f"/agent/{agent_id}")
+        data = await self._request("GET", f"/agent/{quote(str(agent_id), safe='')}")
         return data
 
     async def list_devices(self, agent_id: str) -> list[dict]:
-        data = await self._request("GET", f"/agent/{agent_id}/device")
+        data = await self._request(
+            "GET", f"/agent/{quote(str(agent_id), safe='')}/device"
+        )
         return data
 
     async def get_device(self, agent_id: str, device_id: str) -> dict:
-        data = await self._request("GET", f"/agent/{agent_id}/device/{device_id}")
+        data = await self._request(
+            "GET",
+            f"/agent/{quote(str(agent_id), safe='')}"
+            f"/device/{quote(str(device_id), safe='')}",
+        )
         return data

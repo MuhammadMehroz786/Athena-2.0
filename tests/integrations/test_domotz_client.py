@@ -171,3 +171,31 @@ async def test_error_message_excludes_api_key():
         assert API_KEY not in str(exc_info.value)
     finally:
         await client.aclose()
+
+
+async def test_non_json_success_raises_api_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"<html>oops</html>")
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    client = DomotzClient(base_url=BASE_URL, api_key=API_KEY, client=http_client)
+    try:
+        with pytest.raises(DomotzAPIError) as exc_info:
+            await client.list_agents()
+        assert not isinstance(exc_info.value, DomotzNotFoundError)
+        assert not isinstance(exc_info.value, DomotzRateLimitError)
+        assert exc_info.value.status_code == 200
+    finally:
+        await client.aclose()
+
+
+async def test_path_segments_url_encoded():
+    captured: list[httpx.Request] = []
+    client = _client_with_mock(200, {"id": 1}, captured=captured)
+    try:
+        await client.get_device(agent_id="a/b", device_id="x y")
+        raw_path = captured[0].url.raw_path.decode("ascii")
+        assert raw_path.endswith("/agent/a%2Fb/device/x%20y")
+    finally:
+        await client.aclose()
