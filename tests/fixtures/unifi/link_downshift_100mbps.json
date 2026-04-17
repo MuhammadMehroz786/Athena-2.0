@@ -1,0 +1,9 @@
+{
+  "event_id": "unifi-evt-003",
+  "timestamp": "2026-04-17T12:02:00Z",
+  "site_id": "site-abc",
+  "device_mac": "aa:bb:cc:dd:ee:01",
+  "type": "switch.port.link_speed_changed",
+  "severity": "warning",
+  "data": {"port": 7, "speed_mbps": 100, "previous_speed_mbps": 1000}
+}
