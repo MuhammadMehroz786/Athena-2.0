@@ -5,8 +5,10 @@ from athena.db.engine import get_sessionmaker
 from athena.db.models import Device, Event, Site
 from athena.integrations.domotz_client import DomotzClient
 from athena.integrations.openai_client import OpenAIClient
+from athena.integrations.twilio_client import TwilioClient
 from athena.worker.classifier import classify
 from athena.worker.enrichment import resolve_device_importance
+from athena.worker.notifier import NotifyConfig, dispatch_notifications
 from athena.worker.summarizer import generate_summary
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,16 @@ def _default_openai_client() -> OpenAIClient:
     )
 
 
+def _default_twilio_client() -> TwilioClient:
+    s = get_settings()
+    return TwilioClient(
+        account_sid=s.twilio_account_sid,
+        auth_token=s.twilio_auth_token,
+        base_url=s.twilio_base_url,
+        timeout=s.twilio_timeout_seconds,
+    )
+
+
 async def detect_event(ctx, event_id: str) -> dict:
     settings = get_settings()
 
@@ -42,7 +54,14 @@ async def detect_event(ctx, event_id: str) -> dict:
         openai_client = _default_openai_client()
         owns_openai = True
 
+    twilio_client = ctx.get("twilio_client") if isinstance(ctx, dict) else None
+    owns_twilio = False
+    if settings.twilio_enabled and twilio_client is None:
+        twilio_client = _default_twilio_client()
+        owns_twilio = True
+
     summary_value: str | None = None
+    notify_outcomes: list[str] = []
     try:
         Session = get_sessionmaker()
         async with Session() as session:
@@ -89,15 +108,32 @@ async def detect_event(ctx, event_id: str) -> dict:
                     summary_value = truncated
 
             await session.commit()
+
+            notify_config = NotifyConfig(
+                enabled=settings.twilio_enabled,
+                from_number=settings.twilio_from_number,
+                to_number=settings.notify_contact_phone,
+                twiml_url=None,
+            )
+            notify_outcomes = await dispatch_notifications(
+                client=twilio_client,
+                classification=classification,
+                summary=event.summary,
+                event=event,
+                config=notify_config,
+            )
     finally:
         if owns_domotz and domotz_client is not None:
             await domotz_client.aclose()
         if owns_openai and openai_client is not None:
             await openai_client.aclose()
+        if owns_twilio and twilio_client is not None:
+            await twilio_client.aclose()
 
     logger.info("detect_event classified %s as %s", event_id, classification)
     return {
         "event_id": event_id,
         "classification": classification,
         "summary": summary_value,
+        "notifications": notify_outcomes,
     }

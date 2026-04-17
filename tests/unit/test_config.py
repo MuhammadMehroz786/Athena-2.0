@@ -102,3 +102,49 @@ def test_settings_openai_overrides(monkeypatch):
     assert s.openai_base_url == "https://proxy.local/v1"
     assert s.openai_timeout_seconds == 3.5
     assert s.openai_enabled is False
+
+
+def test_twilio_disabled_allows_empty_credentials(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_ENABLED", "false")
+    for k in (
+        "TWILIO_ENABLED",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_FROM_NUMBER",
+        "NOTIFY_CONTACT_PHONE",
+    ):
+        monkeypatch.delenv(k, raising=False)
+    s = Settings(_env_file=None)
+    assert s.twilio_enabled is False
+    assert s.twilio_account_sid == ""
+    assert s.twilio_auth_token == ""
+    assert s.twilio_from_number == ""
+    assert s.notify_contact_phone == ""
+    assert s.twilio_base_url == "https://api.twilio.com/2010-04-01"
+    assert s.twilio_timeout_seconds == 8.0
+
+
+def test_twilio_enabled_requires_credentials(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("TWILIO_ENABLED", "true")
+    monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "tok")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15555550100")
+    monkeypatch.setenv("NOTIFY_CONTACT_PHONE", "+15555550199")
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None)
+    assert "TWILIO_ACCOUNT_SID" in str(exc_info.value)
+
+
+def test_twilio_enabled_requires_contact_phone(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("TWILIO_ENABLED", "true")
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "tok")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15555550100")
+    monkeypatch.delenv("NOTIFY_CONTACT_PHONE", raising=False)
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None)
+    assert "NOTIFY_CONTACT_PHONE" in str(exc_info.value)

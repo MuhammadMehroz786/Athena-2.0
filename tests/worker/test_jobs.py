@@ -11,6 +11,7 @@ from athena.integrations.domotz_client import (
     DomotzRateLimitError,
 )
 from athena.integrations.openai_client import OpenAIAPIError
+from athena.integrations.twilio_client import TwilioAPIError
 from athena.worker import jobs
 
 
@@ -44,10 +45,18 @@ def _mk_openai_mock(content: str | None = "summary-text"):
     return m
 
 
-def _ctx(domotz_client=None, openai_client=None):
+def _mk_twilio_mock():
+    m = AsyncMock()
+    m.send_sms = AsyncMock(return_value={"sid": "SM1"})
+    m.start_call = AsyncMock(return_value={"sid": "CA1"})
+    return m
+
+
+def _ctx(domotz_client=None, openai_client=None, twilio_client=None):
     return {
         "domotz_client": domotz_client if domotz_client is not None else AsyncMock(),
         "openai_client": openai_client if openai_client is not None else _mk_openai_mock(),
+        "twilio_client": twilio_client if twilio_client is not None else _mk_twilio_mock(),
     }
 
 
@@ -503,3 +512,97 @@ async def test_detect_event_summary_never_overrides_classification(
     await session.refresh(refreshed)
     assert refreshed.classification == "notify_critical"
     assert refreshed.summary == "DOWNGRADE"
+
+
+@pytest.mark.asyncio
+async def test_detect_event_returns_notifications_field(session, patch_sessionmaker):
+    t, s = await _make_tenant_site(session)
+    e = Event(
+        tenant_id=t.id, site_id=s.id, vendor="unifi",
+        event_type="switch.port.poe_lost", severity="warn",
+        vendor_event_id="vendor-evt-notif-field", raw_payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    session.add(e)
+    await session.commit()
+
+    result = await jobs.detect_event(_ctx(), event_id=e.id)
+    assert "notifications" in result
+    assert isinstance(result["notifications"], list)
+
+
+@pytest.mark.asyncio
+async def test_detect_event_notify_critical_triggers_sms_and_call(
+    session, patch_sessionmaker, monkeypatch
+):
+    monkeypatch.setenv("TWILIO_ENABLED", "true")
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "tok")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15555550100")
+    monkeypatch.setenv("NOTIFY_CONTACT_PHONE", "+15555550199")
+
+    t, s = await _make_tenant_site(session)
+    d = await _make_device(session, t.id, s.id, "domotz", "dev-notif-crit")
+    e = Event(
+        tenant_id=t.id, site_id=s.id, device_id=d.id, vendor="domotz",
+        event_type="device.down", severity="critical",
+        vendor_event_id="vendor-evt-notif-crit", raw_payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    session.add(e)
+    await session.commit()
+
+    mock_domotz = AsyncMock()
+    mock_domotz.get_device = AsyncMock(return_value={"is_important": True})
+    mock_twilio = _mk_twilio_mock()
+
+    result = await jobs.detect_event(
+        _ctx(domotz_client=mock_domotz, twilio_client=mock_twilio),
+        event_id=e.id,
+    )
+
+    assert result["classification"] == "notify_critical"
+    assert mock_twilio.send_sms.await_count == 1
+    assert mock_twilio.start_call.await_count == 1
+    assert len(result["notifications"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_detect_event_twilio_failure_does_not_raise(
+    session, patch_sessionmaker, monkeypatch
+):
+    monkeypatch.setenv("TWILIO_ENABLED", "true")
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "tok")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15555550100")
+    monkeypatch.setenv("NOTIFY_CONTACT_PHONE", "+15555550199")
+
+    t, s = await _make_tenant_site(session)
+    d = await _make_device(session, t.id, s.id, "domotz", "dev-notif-fail")
+    e = Event(
+        tenant_id=t.id, site_id=s.id, device_id=d.id, vendor="domotz",
+        event_type="device.down", severity="critical",
+        vendor_event_id="vendor-evt-notif-fail", raw_payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    session.add(e)
+    await session.commit()
+
+    mock_domotz = AsyncMock()
+    mock_domotz.get_device = AsyncMock(return_value={"is_important": True})
+    mock_twilio = AsyncMock()
+    mock_twilio.send_sms = AsyncMock(
+        side_effect=TwilioAPIError("boom", status_code=500, url="u")
+    )
+    mock_twilio.start_call = AsyncMock(return_value={"sid": "CAok"})
+
+    result = await jobs.detect_event(
+        _ctx(domotz_client=mock_domotz, twilio_client=mock_twilio),
+        event_id=e.id,
+    )
+
+    assert result["classification"] == "notify_critical"
+    refreshed = await session.get(Event, e.id)
+    await session.refresh(refreshed)
+    assert refreshed.classification == "notify_critical"
+    assert result["notifications"][0] == "sms:failed:500"
