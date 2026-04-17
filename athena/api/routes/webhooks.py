@@ -48,7 +48,7 @@ async def unifi_webhook(
         raise HTTPException(status_code=400, detail=str(e))
 
     vendor_event_id = normalized.vendor_event_id
-    site_id = normalized.vendor_site_id
+    vendor_site_id = normalized.vendor_site_id
 
     if await already_seen(
         redis,
@@ -59,7 +59,9 @@ async def unifi_webhook(
         response.status_code = status.HTTP_200_OK
         return {"status": "duplicate", "vendor_event_id": vendor_event_id}
 
-    stmt = scoped(select(Site), Site, tenant_id=x_athena_tenant_id).where(Site.id == site_id)
+    stmt = scoped(select(Site), Site, tenant_id=x_athena_tenant_id).where(
+        Site.vendor_site_id == vendor_site_id
+    )
     site = (await db.execute(stmt)).scalar_one_or_none()
     if site is None:
         raise HTTPException(status_code=404, detail="unknown site")
@@ -125,7 +127,7 @@ async def domotz_webhook(
         raise HTTPException(status_code=400, detail=str(e))
 
     vendor_event_id = normalized.vendor_event_id
-    site_id = normalized.vendor_site_id
+    vendor_site_id = normalized.vendor_site_id
 
     if await already_seen(
         redis,
@@ -136,7 +138,9 @@ async def domotz_webhook(
         response.status_code = status.HTTP_200_OK
         return {"status": "duplicate", "vendor_event_id": vendor_event_id}
 
-    stmt = scoped(select(Site), Site, tenant_id=x_athena_tenant_id).where(Site.id == site_id)
+    stmt = scoped(select(Site), Site, tenant_id=x_athena_tenant_id).where(
+        Site.vendor_site_id == vendor_site_id
+    )
     site = (await db.execute(stmt)).scalar_one_or_none()
     if site is None:
         raise HTTPException(status_code=404, detail="unknown agent")

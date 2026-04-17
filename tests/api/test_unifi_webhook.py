@@ -89,7 +89,7 @@ async def _seed_tenant_and_site(session, site_id="site-abc", tenant_id=None):
         t = Tenant(id=tenant_id, name=f"Tenant-{tenant_id}")
         session.add(t)
         await session.flush()
-    s = Site(id=site_id, tenant_id=tenant_id, name="HQ")
+    s = Site(id=site_id, tenant_id=tenant_id, name="HQ", vendor_site_id=site_id)
     session.add(s)
     await session.commit()
     return tenant_id, site_id
@@ -279,8 +279,8 @@ async def test_unifi_webhook_cross_tenant_isolation(session, app_and_deps, clien
     tenant_b = Tenant(name="TenantB")
     session.add_all([tenant_a, tenant_b])
     await session.flush()
-    site_a = Site(id="site-abc", tenant_id=tenant_a.id, name="A-HQ")
-    site_b = Site(id="site-abc-b", tenant_id=tenant_b.id, name="B-HQ")
+    site_a = Site(id="site-abc", tenant_id=tenant_a.id, name="A-HQ", vendor_site_id="site-abc")
+    site_b = Site(id="site-abc-b", tenant_id=tenant_b.id, name="B-HQ", vendor_site_id="site-abc-b")
     session.add_all([site_a, site_b])
     await session.commit()
 

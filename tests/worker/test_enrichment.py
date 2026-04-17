@@ -75,3 +75,19 @@ async def test_rate_limit_reraised():
     )
     with pytest.raises(DomotzRateLimitError):
         await resolve_device_importance(client, "domotz", "site-1", "dev-1")
+
+
+@pytest.mark.asyncio
+async def test_importance_string_false_treated_as_false():
+    client = AsyncMock()
+    client.get_device = AsyncMock(return_value={"is_important": "false"})
+    result = await resolve_device_importance(client, "domotz", "site-1", "dev-1")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_importance_string_true_treated_as_true():
+    client = AsyncMock()
+    client.get_device = AsyncMock(return_value={"is_important": "true"})
+    result = await resolve_device_importance(client, "domotz", "site-1", "dev-1")
+    assert result is True

@@ -24,6 +24,7 @@ SMOKE_TENANT_ID = "tenant-smoke-01"
 SMOKE_TENANT_NAME = "Smoke Test Tenant"
 SMOKE_SITE_ID = "site-abc"  # matches tests/fixtures/unifi/link_down.json
 SMOKE_SITE_NAME = "Smoke Test Site"
+SMOKE_VENDOR_SITE_ID = "site-abc"  # matches tests/fixtures/unifi/link_down.json site_id
 
 
 async def seed(session: AsyncSession) -> tuple[str, str]:
@@ -43,7 +44,12 @@ async def seed(session: AsyncSession) -> tuple[str, str]:
         await session.execute(select(Site).where(Site.id == SMOKE_SITE_ID))
     ).scalar_one_or_none()
     if site is None:
-        site = Site(id=SMOKE_SITE_ID, tenant_id=tenant.id, name=SMOKE_SITE_NAME)
+        site = Site(
+            id=SMOKE_SITE_ID,
+            tenant_id=tenant.id,
+            name=SMOKE_SITE_NAME,
+            vendor_site_id=SMOKE_VENDOR_SITE_ID,
+        )
         session.add(site)
 
     await session.commit()

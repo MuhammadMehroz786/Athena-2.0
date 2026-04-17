@@ -23,8 +23,10 @@ async def resolve_device_importance(
         return False
     if not isinstance(device, dict):
         return False
-    if device.get("is_important"):
-        return True
-    if device.get("important"):
-        return True
+    for key in ("is_important", "important"):
+        val = device.get(key)
+        if val is True:
+            return True
+        if isinstance(val, str) and val.strip().lower() == "true":
+            return True
     return False

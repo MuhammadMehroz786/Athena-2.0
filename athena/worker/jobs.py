@@ -2,7 +2,7 @@ import logging
 
 from athena.config import get_settings
 from athena.db.engine import get_sessionmaker
-from athena.db.models import Device, Event
+from athena.db.models import Device, Event, Site
 from athena.integrations.domotz_client import DomotzClient
 from athena.worker.classifier import classify
 from athena.worker.enrichment import resolve_device_importance
@@ -17,9 +17,10 @@ def _default_domotz_client() -> DomotzClient:
 
 async def detect_event(ctx, event_id: str) -> dict:
     client = ctx.get("domotz_client") if isinstance(ctx, dict) else None
-    owns_client = client is None
-    if owns_client:
+    owns_client = False
+    if client is None:
         client = _default_domotz_client()
+        owns_client = True
     try:
         Session = get_sessionmaker()
         async with Session() as session:
@@ -28,24 +29,29 @@ async def detect_event(ctx, event_id: str) -> dict:
                 raise ValueError(f"Event {event_id} not found")
 
             if event.severity == "critical":
-                vendor_device_id: str | None = None
-                if event.device_id is not None:
-                    device = await session.get(Device, event.device_id)
-                    if device is not None:
-                        vendor_device_id = device.vendor_device_id
-                is_important = await resolve_device_importance(
-                    client,
-                    event.vendor,
-                    event.site_id,
-                    vendor_device_id,
-                )
+                site = await session.get(Site, event.site_id)
+                vendor_site_id = site.vendor_site_id if site is not None else None
+                if vendor_site_id is None:
+                    is_important = False
+                else:
+                    vendor_device_id: str | None = None
+                    if event.device_id is not None:
+                        device = await session.get(Device, event.device_id)
+                        if device is not None:
+                            vendor_device_id = device.vendor_device_id
+                    is_important = await resolve_device_importance(
+                        client,
+                        event.vendor,
+                        vendor_site_id,
+                        vendor_device_id,
+                    )
             else:
                 is_important = False
             classification = classify(event.severity, is_important)
             event.classification = classification
             await session.commit()
     finally:
-        if owns_client:
+        if owns_client and client is not None:
             await client.aclose()
 
     logger.info("detect_event classified %s as %s", event_id, classification)

@@ -25,11 +25,11 @@ def patch_sessionmaker(session, monkeypatch):
     return Factory
 
 
-async def _make_tenant_site(session):
+async def _make_tenant_site(session, vendor_site_id="vendor-site-xyz"):
     t = Tenant(name="Acme")
     session.add(t)
     await session.flush()
-    s = Site(tenant_id=t.id, name="HQ")
+    s = Site(tenant_id=t.id, name="HQ", vendor_site_id=vendor_site_id)
     session.add(s)
     await session.flush()
     return t, s
@@ -270,3 +270,26 @@ async def test_detect_event_raises_for_missing_id(patch_sessionmaker):
             {"domotz_client": mock_client},
             event_id="00000000-0000-0000-0000-000000000000",
         )
+
+
+@pytest.mark.asyncio
+async def test_detect_event_site_without_vendor_site_id_skips_enrichment(
+    session, patch_sessionmaker
+):
+    t, s = await _make_tenant_site(session, vendor_site_id=None)
+    d = await _make_device(session, t.id, s.id, "domotz", "dev-no-vsid")
+    e = Event(
+        tenant_id=t.id, site_id=s.id, device_id=d.id, vendor="domotz",
+        event_type="device.down", severity="critical",
+        vendor_event_id="vendor-evt-no-vsid", raw_payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    session.add(e)
+    await session.commit()
+
+    mock_client = AsyncMock()
+    mock_client.get_device = AsyncMock(return_value={"is_important": True})
+    result = await jobs.detect_event({"domotz_client": mock_client}, event_id=e.id)
+
+    assert result["classification"] == "notify_warn"
+    assert mock_client.get_device.call_count == 0
