@@ -1,6 +1,7 @@
 from datetime import datetime, UTC
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from athena.db.models import Tenant, Site, Device, Event
 
 
@@ -41,7 +42,7 @@ async def test_event_unique_by_tenant_vendor_event_id(session):
     session.add(Event(vendor_event_id="dup", **common))
     await session.commit()
     session.add(Event(vendor_event_id="dup", **common))
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         await session.commit()
 
 

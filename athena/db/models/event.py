@@ -14,6 +14,7 @@ class Event(Base):
         ),
         Index("ix_events_tenant_occurred_at", "tenant_id", "occurred_at"),
         Index("ix_events_device_occurred_at", "device_id", "occurred_at"),
+        Index("ix_events_site_occurred_at", "site_id", "occurred_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
