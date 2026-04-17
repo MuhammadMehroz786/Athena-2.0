@@ -30,11 +30,24 @@ async def test_scoped_filters_by_tenant_id(session):
     assert rows[0].tenant_id == t1.id
 
 
-def test_scoped_requires_tenant_id():
+def test_scoped_requires_tenant_id_empty_string():
     with pytest.raises(ValueError):
         scoped(select(Event), Event, tenant_id="")
+
+
+def test_scoped_requires_tenant_id_none():
+    with pytest.raises(ValueError):
+        scoped(select(Event), Event, tenant_id=None)  # type: ignore[arg-type]
 
 
 def test_scoped_rejects_model_without_tenant_id():
     with pytest.raises(ValueError):
         scoped(select(Tenant), Tenant, tenant_id="any")
+
+
+def test_scoped_rejects_instance_instead_of_class():
+    instance = Event(tenant_id="t1", site_id="s1", vendor="unifi",
+                     event_type="e", severity="info", vendor_event_id="v",
+                     raw_payload={}, occurred_at=datetime.now(UTC))
+    with pytest.raises(ValueError):
+        scoped(select(Event), instance, tenant_id="t1")
