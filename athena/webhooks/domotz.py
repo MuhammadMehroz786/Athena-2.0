@@ -10,10 +10,10 @@ class DomotzNormalizeError(ValueError):
 
 
 def _severity_for(event_type: str) -> str:
-    et = event_type.lower()
-    if et.endswith(".down") or et.endswith(".lost"):
+    tokens = event_type.lower().split(".")
+    if "down" in tokens or "lost" in tokens:
         return "critical"
-    if et.startswith("configuration."):
+    if "configuration" in tokens:
         return "warn"
     return "info"
 

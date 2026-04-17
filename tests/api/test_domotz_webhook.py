@@ -188,7 +188,7 @@ async def test_domotz_webhook_missing_api_key(session, app_and_deps, client):
             "Content-Type": "application/json",
         },
     )
-    assert resp.status_code in (401, 422)
+    assert resp.status_code == 422
 
     async with Factory() as s:
         rows = (await s.execute(select(Event))).scalars().all()
@@ -359,6 +359,9 @@ async def test_domotz_webhook_invalid_payload_returns_400(session, app_and_deps,
         ("heartbeat.lost", "critical"),
         ("configuration.change", "warn"),
         ("ip.change", "info"),
+        ("device.configuration.change", "warn"),
+        ("network.connection.lost", "critical"),
+        ("device.heartbeat.lost", "critical"),
     ],
 )
 async def test_domotz_webhook_severity_mapping(
