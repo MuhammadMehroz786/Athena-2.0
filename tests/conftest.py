@@ -15,6 +15,13 @@ async def engine():
 
 @pytest_asyncio.fixture
 async def session(engine):
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as s:
-        yield s
+    async with engine.connect() as conn:
+        trans = await conn.begin()
+        Session = async_sessionmaker(
+            bind=conn,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
+        async with Session() as s:
+            yield s
+        await trans.rollback()

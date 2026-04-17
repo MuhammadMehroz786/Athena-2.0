@@ -8,7 +8,7 @@ from athena.db.base import Base
 class Device(Base):
     __tablename__ = "devices"
     __table_args__ = (
-        UniqueConstraint("vendor", "vendor_device_id", name="uq_devices_vendor_vendor_device_id"),
+        UniqueConstraint("tenant_id", "vendor", "vendor_device_id", name="uq_devices_tenant_vendor_vendor_device_id"),
         Index("ix_devices_tenant_id", "tenant_id"),
         Index("ix_devices_site_id", "site_id"),
     )
