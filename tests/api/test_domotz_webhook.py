@@ -60,6 +60,8 @@ def settings_env(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("UNIFI_WEBHOOK_SECRET", "test-unifi-secret")
     monkeypatch.setenv("DOMOTZ_WEBHOOK_SECRET", SECRET)
+    monkeypatch.setenv("DOMOTZ_API_BASE_URL", "https://api.test.domotz.local/public-api/v1")
+    monkeypatch.setenv("DOMOTZ_API_KEY", "test-domotz-api-key")
     from athena import config
     config.get_settings.cache_clear() if hasattr(config.get_settings, "cache_clear") else None
 
