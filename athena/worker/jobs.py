@@ -84,8 +84,9 @@ async def detect_event(ctx, event_id: str) -> dict:
                     vendor_device_id=vendor_device_id,
                 )
                 if summary is not None:
-                    event.summary = summary
-                    summary_value = summary
+                    truncated = summary[:512]
+                    event.summary = truncated
+                    summary_value = truncated
 
             await session.commit()
     finally:

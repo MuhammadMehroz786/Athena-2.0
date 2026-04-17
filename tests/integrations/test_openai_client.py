@@ -187,6 +187,82 @@ async def test_injected_client_not_closed_by_aclose():
     await http_client.aclose()
 
 
+async def test_401_error_does_not_include_response_body():
+    body_str = '{"error":{"message":"key sk-abc123 invalid"}}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            401,
+            content=body_str.encode(),
+            headers={"Content-Type": "application/json"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    client = OpenAIClient(
+        base_url=BASE_URL, api_key=API_KEY, model=MODEL, client=http_client
+    )
+    try:
+        with pytest.raises(OpenAIAPIError) as exc_info:
+            await client.summarize_event({})
+        # Must be the base OpenAIAPIError, NOT RateLimit
+        assert type(exc_info.value) is OpenAIAPIError
+        assert not isinstance(exc_info.value, OpenAIRateLimitError)
+        assert exc_info.value.status_code == 401
+        msg = str(exc_info.value)
+        assert "sk-" not in msg
+        assert "sk-abc123" not in msg
+        assert "invalid" not in msg
+        assert body_str not in msg
+        assert exc_info.value.message == msg
+        assert "sk-" not in exc_info.value.message
+    finally:
+        await client.aclose()
+
+
+async def test_403_error_does_not_include_response_body():
+    body_str = '{"error":{"message":"forbidden sk-xyz789 access"}}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            content=body_str.encode(),
+            headers={"Content-Type": "application/json"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    client = OpenAIClient(
+        base_url=BASE_URL, api_key=API_KEY, model=MODEL, client=http_client
+    )
+    try:
+        with pytest.raises(OpenAIAPIError) as exc_info:
+            await client.summarize_event({})
+        assert type(exc_info.value) is OpenAIAPIError
+        assert not isinstance(exc_info.value, OpenAIRateLimitError)
+        assert exc_info.value.status_code == 403
+        msg = str(exc_info.value)
+        assert "sk-" not in msg
+        assert "forbidden" not in msg
+        assert body_str not in msg
+    finally:
+        await client.aclose()
+
+
+async def test_500_error_still_includes_body_excerpt():
+    body_dict = {"error": "boom specific detail"}
+
+    client = _client_with_mock(500, body_dict)
+    try:
+        with pytest.raises(OpenAIAPIError) as exc_info:
+            await client.summarize_event({})
+        assert exc_info.value.status_code == 500
+        # Non-401/403 error: body excerpt is still present
+        assert "boom specific detail" in str(exc_info.value)
+    finally:
+        await client.aclose()
+
+
 async def test_context_manager_closes_owned_client():
     transport = httpx.MockTransport(
         lambda r: httpx.Response(200, content=json.dumps(_ok_body("hi")).encode())

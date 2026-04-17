@@ -105,11 +105,10 @@ async def test_generate_summary_context_shape():
         "occurred_at",
         "vendor_device_id",
         "vendor_site_id",
-        "raw_payload",
     }
+    assert "raw_payload" not in captured
     assert captured["vendor"] == "domotz"
     assert captured["classification"] == "notify_critical"
     assert captured["is_important_device"] is True
     assert captured["vendor_device_id"] == "dev-abc"
     assert captured["vendor_site_id"] == "vendor-site-xyz"
-    assert captured["raw_payload"] == {"port": 22}

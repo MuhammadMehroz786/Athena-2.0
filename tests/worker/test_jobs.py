@@ -441,6 +441,39 @@ async def test_detect_event_continues_when_openai_fails(
 
 
 @pytest.mark.asyncio
+async def test_detect_event_truncates_oversized_summary(
+    session, patch_sessionmaker
+):
+    t, s = await _make_tenant_site(session)
+    d = await _make_device(session, t.id, s.id, "domotz", "dev-sum-trunc")
+    e = Event(
+        tenant_id=t.id, site_id=s.id, device_id=d.id, vendor="domotz",
+        event_type="device.down", severity="critical",
+        vendor_event_id="vendor-evt-sum-trunc", raw_payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    session.add(e)
+    await session.commit()
+
+    oversized = "A" * 600
+    mock_domotz = AsyncMock()
+    mock_domotz.get_device = AsyncMock(return_value={"is_important": True})
+    mock_openai = _mk_openai_mock(oversized)
+
+    result = await jobs.detect_event(
+        _ctx(domotz_client=mock_domotz, openai_client=mock_openai),
+        event_id=e.id,
+    )
+
+    assert result["summary"] == oversized[:512]
+    assert len(result["summary"]) == 512
+    refreshed = await session.get(Event, e.id)
+    await session.refresh(refreshed)
+    assert refreshed.summary == oversized[:512]
+    assert len(refreshed.summary) == 512
+
+
+@pytest.mark.asyncio
 async def test_detect_event_summary_never_overrides_classification(
     session, patch_sessionmaker
 ):

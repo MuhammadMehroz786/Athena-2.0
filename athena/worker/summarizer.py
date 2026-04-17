@@ -25,7 +25,6 @@ async def generate_summary(
         "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
         "vendor_device_id": vendor_device_id,
         "vendor_site_id": site.vendor_site_id if site is not None else None,
-        "raw_payload": event.raw_payload,
     }
     try:
         return await client.summarize_event(context)

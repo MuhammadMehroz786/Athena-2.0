@@ -62,6 +62,24 @@ def test_settings_missing_openai_api_key_raises(monkeypatch):
         Settings(_env_file=None)
 
 
+def test_openai_key_optional_when_disabled(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_ENABLED", "false")
+    s = Settings(_env_file=None)
+    assert s.openai_api_key == ""
+    assert s.openai_enabled is False
+
+
+def test_openai_key_required_when_enabled(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_ENABLED", "true")
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None)
+    assert "required when OPENAI_ENABLED" in str(exc_info.value)
+
+
 def test_settings_openai_defaults(monkeypatch):
     _base_env(monkeypatch)
     for k in ("OPENAI_MODEL", "OPENAI_BASE_URL", "OPENAI_TIMEOUT_SECONDS", "OPENAI_ENABLED"):
