@@ -62,6 +62,7 @@ def settings_env(monkeypatch):
     monkeypatch.setenv("DOMOTZ_WEBHOOK_SECRET", SECRET)
     monkeypatch.setenv("DOMOTZ_API_BASE_URL", "https://api.test.domotz.local/public-api/v1")
     monkeypatch.setenv("DOMOTZ_API_KEY", "test-domotz-api-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     from athena import config
     config.get_settings.cache_clear() if hasattr(config.get_settings, "cache_clear") else None
 
