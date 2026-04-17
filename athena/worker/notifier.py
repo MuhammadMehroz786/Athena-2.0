@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 
-from athena.db.models import Event
 from athena.integrations.twilio_client import TwilioAPIError, TwilioClient
 
 logger = logging.getLogger("athena.worker.notifier")
@@ -19,14 +19,23 @@ class NotifyConfig:
     twiml_url: str | None = None
 
 
-def _build_body(classification: str, summary: str | None, event: Event) -> str:
-    received_iso = event.received_at.isoformat() if event.received_at else ""
-    summary_text = summary if summary else "(no summary)"
-    body = (
-        f"[{classification.upper()}] {event.vendor}/{event.event_type} "
-        f"on {received_iso}: {summary_text}"
+def _build_body(
+    classification: str,
+    vendor: str,
+    event_type: str,
+    received_at: datetime | None,
+    summary: str | None,
+) -> str:
+    received_iso = received_at.isoformat() if received_at else ""
+    header = (
+        f"[{classification.upper()}] {vendor}/{event_type} on {received_iso}: "
     )
-    return body[:_BODY_MAX]
+    summary_text = summary if summary else "(no summary)"
+    remaining = _BODY_MAX - len(header)
+    if remaining <= 0:
+        # pathological: header alone exceeds max — just send truncated header
+        return header[:_BODY_MAX]
+    return header + summary_text[:remaining]
 
 
 async def _try_sms(
@@ -61,7 +70,9 @@ async def dispatch_notifications(
     client: TwilioClient | None,
     classification: str,
     summary: str | None,
-    event: Event,
+    vendor: str,
+    event_type: str,
+    received_at: datetime | None,
     config: NotifyConfig,
 ) -> list[str]:
     if client is None or not config.enabled or not config.to_number:
@@ -69,7 +80,7 @@ async def dispatch_notifications(
     if classification not in ("notify_critical", "notify_warn"):
         return []
 
-    body = _build_body(classification, summary, event)
+    body = _build_body(classification, vendor, event_type, received_at, summary)
     outcomes: list[str] = [await _try_sms(client, config, body)]
     if classification == "notify_critical":
         outcomes.append(await _try_call(client, config))

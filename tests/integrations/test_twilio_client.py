@@ -308,3 +308,25 @@ async def test_context_manager_closes_owned_client():
     ) as c:
         result = await c.send_sms(FROM_NUMBER, TO_NUMBER, "hi")
         assert result["sid"] == "SM123"
+
+
+async def test_network_error_suppresses_exception_chain():
+    """The original httpx.RequestError carries the request object and its
+    Authorization header. Using 'raise ... from None' prevents that object
+    from being preserved in __cause__ (and keeps tracebacks clean)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom", request=request)
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    client = TwilioClient(
+        account_sid=ACCOUNT_SID, auth_token=AUTH_TOKEN,
+        base_url=BASE_URL, client=http_client,
+    )
+    try:
+        with pytest.raises(TwilioAPIError) as exc_info:
+            await client.send_sms(FROM_NUMBER, TO_NUMBER, "hi")
+        assert exc_info.value.__cause__ is None
+    finally:
+        await client.aclose()

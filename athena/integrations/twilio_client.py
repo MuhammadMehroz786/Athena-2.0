@@ -95,7 +95,7 @@ class TwilioClient:
                 f"POST {path} -> network error: {e.__class__.__name__}",
                 status_code=None,
                 url=url,
-            ) from e
+            ) from None
 
         if resp.status_code >= 400:
             logger.warning("twilio POST %s (%d)", path, resp.status_code)
@@ -110,7 +110,7 @@ class TwilioClient:
                 f"POST {path} -> non-JSON response",
                 status_code=resp.status_code,
                 url=url,
-            ) from exc
+            ) from None
 
     async def send_sms(self, from_number: str, to_number: str, body: str) -> dict:
         path = f"/Accounts/{quote(str(self._account_sid), safe='')}/Messages.json"

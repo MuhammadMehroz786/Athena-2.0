@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from athena.db.models import Device, Event, Site, Tenant
@@ -606,3 +607,68 @@ async def test_detect_event_twilio_failure_does_not_raise(
     await session.refresh(refreshed)
     assert refreshed.classification == "notify_critical"
     assert result["notifications"][0] == "sms:failed:500"
+
+
+@pytest.mark.asyncio
+async def test_detect_event_commit_failure_skips_notification(
+    session, patch_sessionmaker, monkeypatch
+):
+    """If session.commit raises, detect_event must propagate the error and
+    MUST NOT have dispatched any notification. This enforces the invariant
+    that dispatch_notifications only runs after a successful commit (and
+    by construction, outside the session block — so session-close errors
+    cannot cause a retry that re-sends SMS/call)."""
+    monkeypatch.setenv("TWILIO_ENABLED", "true")
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "tok")
+    monkeypatch.setenv("TWILIO_FROM_NUMBER", "+15555550100")
+    monkeypatch.setenv("NOTIFY_CONTACT_PHONE", "+15555550199")
+
+    t, s = await _make_tenant_site(session)
+    d = await _make_device(session, t.id, s.id, "domotz", "dev-commit-fail")
+    e = Event(
+        tenant_id=t.id, site_id=s.id, device_id=d.id, vendor="domotz",
+        event_type="device.down", severity="critical",
+        vendor_event_id="vendor-evt-commit-fail", raw_payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    session.add(e)
+    await session.commit()
+
+    # Patch the factory used by detect_event so session.commit raises.
+    original_factory = jobs.get_sessionmaker()
+
+    class _BrokenSession:
+        def __init__(self, real):
+            self._real = real
+
+        async def __aenter__(self):
+            self._ctx = await self._real.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return await self._real.__aexit__(exc_type, exc, tb)
+
+        def __getattr__(self, name):
+            return getattr(self._ctx, name)
+
+        async def commit(self):
+            raise SQLAlchemyError("simulated commit failure")
+
+    def _broken_factory():
+        return _BrokenSession(original_factory())
+
+    monkeypatch.setattr(jobs, "get_sessionmaker", lambda: _broken_factory)
+
+    mock_domotz = AsyncMock()
+    mock_domotz.get_device = AsyncMock(return_value={"is_important": True})
+    mock_twilio = _mk_twilio_mock()
+
+    with pytest.raises(SQLAlchemyError):
+        await jobs.detect_event(
+            _ctx(domotz_client=mock_domotz, twilio_client=mock_twilio),
+            event_id=e.id,
+        )
+
+    assert mock_twilio.send_sms.await_count == 0
+    assert mock_twilio.start_call.await_count == 0

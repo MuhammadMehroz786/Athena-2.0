@@ -109,19 +109,30 @@ async def detect_event(ctx, event_id: str) -> dict:
 
             await session.commit()
 
-            notify_config = NotifyConfig(
-                enabled=settings.twilio_enabled,
-                from_number=settings.twilio_from_number,
-                to_number=settings.notify_contact_phone,
-                twiml_url=None,
-            )
-            notify_outcomes = await dispatch_notifications(
-                client=twilio_client,
-                classification=classification,
-                summary=event.summary,
-                event=event,
-                config=notify_config,
-            )
+            # Capture fields needed by dispatch_notifications before the
+            # session closes, so notification dispatch can run outside the
+            # session block. Doing so avoids re-sending SMS/call if session
+            # close errors trigger an Arq retry after a successful commit.
+            event_vendor = event.vendor
+            event_type = event.event_type
+            event_received_at = event.received_at
+            event_summary = event.summary
+
+        notify_config = NotifyConfig(
+            enabled=settings.twilio_enabled,
+            from_number=settings.twilio_from_number,
+            to_number=settings.notify_contact_phone,
+            twiml_url=None,
+        )
+        notify_outcomes = await dispatch_notifications(
+            client=twilio_client,
+            classification=classification,
+            summary=event_summary,
+            vendor=event_vendor,
+            event_type=event_type,
+            received_at=event_received_at,
+            config=notify_config,
+        )
     finally:
         if owns_domotz and domotz_client is not None:
             await domotz_client.aclose()
