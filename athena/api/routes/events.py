@@ -1,6 +1,6 @@
 import base64
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -38,6 +38,8 @@ class EventsPage(BaseModel):
 
 
 def _encode_cursor(received_at: datetime, event_id: str) -> str:
+    if received_at.tzinfo is None:
+        received_at = received_at.replace(tzinfo=UTC)
     raw = json.dumps({"received_at": received_at.isoformat(), "id": event_id}).encode()
     return base64.urlsafe_b64encode(raw).decode()
 
@@ -46,7 +48,10 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
     try:
         raw = base64.urlsafe_b64decode(cursor.encode())
         data = json.loads(raw)
-        return datetime.fromisoformat(data["received_at"]), data["id"]
+        dt = datetime.fromisoformat(data["received_at"])
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt, data["id"]
     except Exception:
         raise HTTPException(status_code=400, detail="invalid cursor")
 

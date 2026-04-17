@@ -280,6 +280,73 @@ async def test_events_empty_page_returns_empty_list_and_null_cursor(session, app
 
 
 @pytest.mark.asyncio
+async def test_events_pagination_keyset_same_timestamp(session, app_and_deps, client):
+    tenant_id, site_id = await _seed_tenant_site(session)
+
+    same_ts = datetime.now(UTC)
+    async with app_and_deps[3]() as s:
+        for i in range(5):
+            s.add(_make_event(
+                tenant_id, site_id,
+                vendor_event_id=f"same-{i}",
+                occurred_at=same_ts, received_at=same_ts,
+            ))
+        await s.commit()
+
+    resp1 = await client.get(
+        "/events",
+        params={"limit": 2},
+        headers={"X-Athena-Tenant-Id": tenant_id},
+    )
+    assert resp1.status_code == 200
+    data1 = resp1.json()
+    assert len(data1["events"]) == 2
+    assert data1["next_cursor"] is not None
+
+    resp2 = await client.get(
+        "/events",
+        params={"limit": 2, "cursor": data1["next_cursor"]},
+        headers={"X-Athena-Tenant-Id": tenant_id},
+    )
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert len(data2["events"]) == 2
+    assert data2["next_cursor"] is not None
+
+    resp3 = await client.get(
+        "/events",
+        params={"limit": 2, "cursor": data2["next_cursor"]},
+        headers={"X-Athena-Tenant-Id": tenant_id},
+    )
+    assert resp3.status_code == 200
+    data3 = resp3.json()
+    assert len(data3["events"]) == 1
+    assert data3["next_cursor"] is None
+
+    all_ids = [e["id"] for e in data1["events"] + data2["events"] + data3["events"]]
+    assert len(all_ids) == 5
+    assert len(set(all_ids)) == 5
+
+
+def test_decode_cursor_coerces_naive_to_utc():
+    from athena.api.routes.events import _decode_cursor, _encode_cursor
+
+    naive = datetime(2026, 4, 17, 12, 0, 0)
+    assert naive.tzinfo is None
+    raw = json.dumps({"received_at": naive.isoformat(), "id": "some-id"}).encode()
+    cursor = base64.urlsafe_b64encode(raw).decode()
+
+    dt, eid = _decode_cursor(cursor)
+    assert dt.tzinfo is not None
+    assert dt.utcoffset().total_seconds() == 0
+    assert eid == "some-id"
+
+    encoded = _encode_cursor(naive, "x")
+    raw2 = json.loads(base64.urlsafe_b64decode(encoded.encode()))
+    assert "+00:00" in raw2["received_at"] or raw2["received_at"].endswith("Z")
+
+
+@pytest.mark.asyncio
 async def test_events_invalid_cursor_returns_400(session, app_and_deps, client):
     tenant_id, _ = await _seed_tenant_site(session)
 
