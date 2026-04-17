@@ -17,7 +17,7 @@ def _run_migration_on_sqlite(engine):
         op_mod._proxy = op_proxy
         try:
             import importlib.util, pathlib
-            mig_path = pathlib.Path("alembic/versions/0001_initial.py").resolve()
+            mig_path = pathlib.Path(__file__).resolve().parent.parent.parent / "alembic" / "versions" / "0001_initial.py"
             spec = importlib.util.spec_from_file_location("mig_0001", mig_path)
             mig = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mig)

@@ -1,6 +1,6 @@
 from datetime import datetime, UTC
 import uuid
-from sqlalchemy import DateTime, ForeignKey, JSON, String, UniqueConstraint, Index
+from sqlalchemy import DateTime, ForeignKey, JSON, String, UniqueConstraint, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from athena.db.base import Base
 
@@ -27,4 +27,9 @@ class Event(Base):
     vendor_event_id: Mapped[str] = mapped_column(String(128), nullable=False)
     raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )

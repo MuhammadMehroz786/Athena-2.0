@@ -1,6 +1,6 @@
 from datetime import datetime, UTC
 import uuid
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, Index
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from athena.db.base import Base
 
@@ -8,7 +8,10 @@ from athena.db.base import Base
 class Device(Base):
     __tablename__ = "devices"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "vendor", "vendor_device_id", name="uq_devices_tenant_vendor_vendor_device_id"),
+        UniqueConstraint(
+            "tenant_id", "vendor", "vendor_device_id",
+            name="uq_devices_tenant_vendor_vendor_device_id",
+        ),
         Index("ix_devices_tenant_id", "tenant_id"),
         Index("ix_devices_site_id", "site_id"),
     )
@@ -20,4 +23,9 @@ class Device(Base):
     vendor_device_id: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )
