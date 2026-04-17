@@ -37,6 +37,7 @@ def settings_env(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("UNIFI_WEBHOOK_SECRET", SECRET)
+    monkeypatch.setenv("DOMOTZ_WEBHOOK_SECRET", "test-domotz-secret")
     from athena import config
     config.get_settings.cache_clear() if hasattr(config.get_settings, "cache_clear") else None
 

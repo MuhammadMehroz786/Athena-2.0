@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     database_url: str = Field(..., alias="DATABASE_URL")
     redis_url: str = Field(..., alias="REDIS_URL")
     unifi_webhook_secret: str = Field(..., alias="UNIFI_WEBHOOK_SECRET")
+    domotz_webhook_secret: str = Field(..., alias="DOMOTZ_WEBHOOK_SECRET")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     env: str = Field("dev", alias="ENV")
 
