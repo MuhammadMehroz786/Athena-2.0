@@ -26,6 +26,7 @@ class Event(Base):
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
     vendor_event_id: Mapped[str] = mapped_column(String(128), nullable=False)
     raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    classification: Mapped[str | None] = mapped_column(String(32), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
